@@ -178,7 +178,7 @@ footer a{color:inherit}
 #tkRuas{font:600 13px Inter,sans-serif;transition:opacity .4s;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 /* lebar slot cuaca/udara tetap, supaya posisi PPK tidak bergeser */
 @media(min-width:601px){#tkWx{flex:none;width:21em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-@media(max-width:1300px){#tkWx{width:15.5em!important}#tkWx small{display:none}}
+@media(max-width:1300px){#tkWx{width:20.5em!important}#tkWx small{display:none}}
 #tkRuas[hidden],#tkRuasSep[hidden],#tkSrc[hidden]{display:none}
 #tkRuas b{background:#fff;color:var(--hot);border-radius:4px;padding:1px 5px;margin-right:4px;font-size:11px}
 #tkRuas .mp{background:#7b1f1f;color:#fff;border-radius:4px;padding:1px 5px;margin-left:2px}
@@ -693,14 +693,30 @@ const KOTA_CUACA=[["Palembang",-2.976,104.775],["Lubuklinggau",-3.296,102.861],[
   let sholat=null,api=null;
   const urutan=()=>{const o=[];for(const d of data){o.push(d);if(udara[d.nama])o.push(udara[d.nama])}
     if(api)o.splice(Math.min(2,o.length),0,{jenis:'api'});
+    hitung().forEach((h,n)=>o.splice(Math.min(4+n*4,o.length),0,h));
     if(sholat)for(let i=o.length;i>=0;i-=4)o.splice(i,0,{jenis:'sholat'});return o};
+  // Hitung mundur: Tahun Baru, 1 Ramadhan, Idul Fitri (tanggal pemerintah bila sudah ada, selain itu kalender Umm al-Qura)
+  const RESMI={1448:{r:'2027-02-08',f:'2027-03-10'}}; // f: SKB 3 Menteri 2027 (Idul Fitri 10-11 Mar); r: perkiraan, menunggu sidang isbat
+  const hijri=new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{day:'numeric',month:'numeric',year:'numeric',timeZone:'UTC'});
+  const cariH=(dari,bln)=>{let d=new Date(dari);for(let k=0;k<400;k++){const p=Object.fromEntries(hijri.formatToParts(d).map(x=>[x.type,x.value]));
+      if(+p.month===bln&&+p.day===1)return {t:d,th:parseInt(p.year)};d=new Date(d.getTime()+864e5)}return null};
+  const tglH=(dari,bln,kunci)=>{const h=cariH(dari,bln);if(!h)return null;const o=RESMI[h.th]&&RESMI[h.th][kunci];return o?{t:new Date(o+'T00:00:00Z'),th:h.th}:h};
+  const hitung=()=>{const n=new Date(Date.now()+7*3600000),hariIni=Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()),sisa=t=>Math.round((t-hariIni)/864e5),out=[];
+    const ty=n.getUTCFullYear()+1;out.push({jenis:'hitung',ikon:'🎆',teks:n.getUTCMonth()===0&&n.getUTCDate()===1?`Selamat Tahun Baru ${ty-1}`:`${sisa(Date.UTC(ty,0,1))} hari menjelang Tahun Baru ${ty}`});
+    try{let fit=tglH(hariIni-3*864e5,10,'f');if(fit&&sisa(fit.t)<0)fit=tglH(fit.t.getTime()+5*864e5,10,'f');const ram=tglH(hariIni+864e5,9,'r');
+      const puasa=fit&&ram&&ram.th>fit.th; // Ramadhan berikutnya sudah tahun depan = sekarang sedang bulan Ramadhan
+      if(ram&&!puasa)out.push({jenis:'hitung',ikon:'🌙',teks:`${sisa(ram.t)} hari menjelang 1 Ramadhan ${ram.th} H`});
+      if(fit)out.push({jenis:'hitung',ikon:'🕌',teks:sisa(fit.t)<=0?`Selamat Idul Fitri ${fit.th} H`:`${sisa(fit.t)} hari menjelang Idul Fitri ${fit.th} H`});
+    }catch(e){}
+    return out};
   const SHOLAT=[['Fajr','Subuh'],['Dhuhr','Dzuhur'],['Asr','Ashar'],['Maghrib','Maghrib'],['Isha','Isya']];
   const berikut=()=>{const now=new Date(),wib=new Date(now.getTime()+(now.getTimezoneOffset()+420)*60000),m=wib.getHours()*60+wib.getMinutes();
     for(const [kk,nm] of SHOLAT){const [h,mm]=(sholat[kk]||'').split(':').map(Number);const t=h*60+mm;if(t>m)return {nm,jam:h,mnt:mm,sisa:t-m}}
     const [h,mm]=sholat.Fajr.split(':').map(Number);return {nm:'Subuh',jam:h,mnt:mm,sisa:h*60+mm+1440-m}};
-  const durasi=x=>x>=60?Math.floor(x/60)+' j '+(x%60)+' mnt':x+' menit';
+  const durasi=x=>x>=60?Math.floor(x/60)+' jam '+(x%60)+' menit':x+' menit';
   const show=()=>{const o=urutan();if(!o.length)return;const d=o[k++%o.length];el.style.opacity=0;
-    setTimeout(()=>{if(d.jenis==='sholat'){const b=berikut(),p=n=>String(n).padStart(2,'0');
+    setTimeout(()=>{if(d.jenis==='hitung'){el.innerHTML=`${d.ikon} ${esc(d.teks)}`;el.title=d.teks+' (tanggal hijriah bisa bergeser sesuai sidang isbat)'}
+      else if(d.jenis==='sholat'){const b=berikut(),p=n=>String(n).padStart(2,'0');
         el.innerHTML=`🕌 ${b.nm} ${p(b.jam)}.${p(b.mnt)} (${durasi(b.sisa)} lagi)`;el.title='Jadwal sholat Palembang (Kemenag, via Aladhan)'}
       else if(d.jenis==='api'){const t=api.teratas&&api.teratas[0];
         el.innerHTML=`🔥 Titik api Sumsel 24 jam: ${api.jumlah} <small>${t?'terbanyak '+esc(t.daerah)+' '+t.jumlah:''}</small>`;
