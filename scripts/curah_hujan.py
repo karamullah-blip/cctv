@@ -20,8 +20,8 @@ def ambil(url):
             rows.append({"tanggal": sel[0], "jam": sel[1], "mm": float(sel[2].replace(",", ".")), "intensitas": sel[3]})
     if not rows:
         print("tidak ada baris tabel; ukuran halaman", len(h), file=sys.stderr)
-        for m in re.findall(r"(?:url|ajax|fetch|api)[^\n]{0,160}", h, re.I)[:15]:
-            print("  petunjuk:", m.strip()[:160], file=sys.stderr)
+        i = h.find("DataTableDetailStation")
+        print(h[max(0, i - 3000):i + 3000], file=sys.stderr)
     return rows
 
 
