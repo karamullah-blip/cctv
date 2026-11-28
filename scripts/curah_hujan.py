@@ -20,8 +20,14 @@ def ambil(url):
             rows.append({"tanggal": sel[0], "jam": sel[1], "mm": float(sel[2].replace(",", ".")), "intensitas": sel[3]})
     if not rows:
         print("tidak ada baris tabel; ukuran halaman", len(h), file=sys.stderr)
-        for m in re.finditer(r"STATION_URL", h):
-            print("=====", h[max(0, m.start() - 1500):m.start() + 1500], file=sys.stderr)
+        for src in re.findall(r'<script[^>]+src="([^"]+)"', h):
+            if src.startswith("/") and "lib" not in src.lower():
+                try:
+                    js = urllib.request.urlopen(urllib.request.Request("https://sdakotapalembang.higertech.com" + src, headers={"User-Agent": "Mozilla/5.0"}), timeout=30).read().decode("utf-8", "replace")
+                except Exception as e:
+                    print("js gagal", src, e, file=sys.stderr); continue
+                for m in re.finditer(r"STATION_URL|DataTableDetailStation", js):
+                    print("=====", src, js[max(0, m.start() - 800):m.start() + 1500], file=sys.stderr)
     return rows
 
 
