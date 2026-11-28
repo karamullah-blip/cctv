@@ -51,6 +51,12 @@ main{padding:6px max(2vw,12px) 40px}
 @media(prefers-reduced-motion:reduce){.live .dot::before{animation:none}}
 dialog{border:0;padding:0;background:#000;width:min(96vw,1280px);border-radius:14px;color:#fff}
 dialog::backdrop{background:rgba(2,17,24,.85)}
+#azan{position:fixed;z-index:60;background:#000;border-radius:10px;overflow:hidden;box-shadow:0 0 0 3px #18a36b}
+#azan[hidden]{display:none}
+#azan .azp{position:absolute;inset:0}#azan .azp iframe{width:100%;height:100%;border:0}
+#azan .azh{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;gap:6px;padding:4px 6px;background:linear-gradient(#000c,#0000);font:700 13px Inter,sans-serif;color:#fff;z-index:2;pointer-events:none}
+#azan .azh button{pointer-events:auto;min-height:28px;font-size:13px;padding:0 8px}
+#azan .azs{background:#18a36b;border-color:#18a36b;color:#fff}
 dialog.ls{width:min(96vw,760px);background:#06222e;color:#e6f4f9}
 .ls .lsb{max-height:min(75vh,720px);overflow:auto;padding:0 12px 12px}
 .ls table{width:100%;border-collapse:collapse;font:500 15px Inter,sans-serif}
@@ -219,6 +225,8 @@ footer a{color:inherit}
   <button id="lsBtn" title="Daftar semua kamera: lokasi dan status online/offline">📋 Daftar kamera</button>
   <details class="more"><summary>⋯ Lainnya</summary><div class="menu">
   <button id="lite" aria-pressed="false" title="Untuk TV / perangkat lemah: 1 video sekaligus, pratinjau tur tanpa video">Mode ringan (TV)</button>
+  <button id="azOn" aria-pressed="true" title="Saat waktu sholat, satu kotak kamera memutar video azan">🕌 Azan otomatis</button>
+  <button id="azUji" title="Coba putar video azan sekarang">▶ Uji azan</button>
   <button id="re">Cek ulang status</button>
   <button id="logout">Keluar akun</button>
   <button id="cp" title="Salin semua nama lokasi sebagai kode LOKASI">Salin daftar nama</button>
@@ -762,6 +770,47 @@ $('logout').onclick=()=>{try{localStorage.removeItem('cctvAuth');sessionStorage.
     if(h>=120)r.style.setProperty('--scrMax',h+'px');else r.style.removeProperty('--scrMax')};
   addEventListener('resize',pas);addEventListener('load',pas);document.addEventListener('click',()=>setTimeout(pas,50));
   setTimeout(pas,300);setTimeout(pas,1500);setTimeout(pas,4000);
+}
+
+// ===== AZAN: saat waktu sholat (Palembang), satu kotak kamera memutar video azan dari YouTube =====
+{
+  const $=id=>document.getElementById(id);
+  const VIDEO='0URHcNmcnUg';            // video azan (YouTube)
+  const NAMA={Fajr:'Subuh',Dhuhr:'Dzuhur',Asr:'Ashar',Maghrib:'Maghrib',Isha:'Isya'};
+  const box=document.createElement('div');box.id='azan';box.hidden=true;
+  box.innerHTML='<div class="azp"><div id="azP"></div></div><div class="azh"><span id="azT">🕌 Azan</span><span><button class="azs" id="azSnd" hidden>🔊 Suara</button> <button id="azX">✕</button></span></div>';
+  document.body.append(box);
+  let on=true,jadwal=null,sudah='',player=null,apiP=null,timerPos=null,tgt=null;
+  try{on=localStorage.getItem('cctvAzan')!=='0'}catch(e){}
+  const tb=$('azOn'),upd=()=>{tb.setAttribute('aria-pressed',on);tb.textContent='🕌 Azan otomatis: '+(on?'Nyala':'Mati')};upd();
+  tb.onclick=()=>{on=!on;try{localStorage.setItem('cctvAzan',on?'1':'0')}catch(e){}upd()};
+  const wib=()=>new Date(Date.now()+(new Date().getTimezoneOffset()+420)*60000);
+  const muat=async()=>{try{const t=wib(),tg=t.getDate()+'-'+(t.getMonth()+1)+'-'+t.getFullYear();
+    const j=await (await fetch('https://api.aladhan.com/v1/timings/'+tg+'?latitude=-2.976&longitude=104.775&method=20&timezonestring=Asia/Jakarta')).json();
+    if(j&&j.data&&j.data.timings)jadwal=j.data.timings}catch(e){}};
+  // Kotak sasaran: kamera pertama yang tampil (grid, mode tur sorot, atau dinding 2x2/6/8/3x3)
+  const sasaran=()=>{const tour=$('tour');
+    if(tour&&!tour.hidden){const w=document.querySelector('#tWall .tc');if(w&&w.offsetParent)return w;return $('tMain')}
+    return [...document.querySelectorAll('#grid .cam:not([hidden]) .scr')].find(e=>{const r=e.getBoundingClientRect();return e.offsetParent&&r.bottom>0&&r.top<innerHeight})};
+  const posisi=()=>{if(!tgt||!tgt.isConnected||!tgt.offsetParent)tgt=sasaran();const t=tgt;if(!t){box.style.cssText='left:8px;bottom:8px;width:min(90vw,480px);height:calc(min(90vw,480px)*.5625)';return}
+    const r=t.getBoundingClientRect();box.style.cssText=`left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`};
+  const api=()=>apiP||(apiP=new Promise(ok=>{if(window.YT&&YT.Player)return ok();window.onYouTubeIframeAPIReady=ok;
+    const sc=document.createElement('script');sc.src='https://www.youtube.com/iframe_api';document.head.append(sc)}));
+  const tutup=()=>{box.hidden=true;clearInterval(timerPos);try{player&&player.destroy()}catch(e){}player=null;tgt=null;
+    if(!$('azP')){const d=document.createElement('div');d.id='azP';box.querySelector('.azp').append(d)}};
+  const putar=async nama=>{await api();tutup();$('azT').textContent='🕌 Azan '+nama;box.hidden=false;posisi();timerPos=setInterval(posisi,1000);
+    player=new YT.Player('azP',{videoId:VIDEO,playerVars:{autoplay:1,controls:0,rel:0,playsinline:1,modestbranding:1},
+      events:{onReady:e=>{e.target.unMute();e.target.setVolume(100);e.target.playVideo();
+          // Browser bisa menolak suara otomatis bila halaman belum pernah disentuh: putar tanpa suara + tombol 🔊
+          setTimeout(()=>{if(player&&player.getPlayerState&&player.getPlayerState()!==1){player.mute();player.playVideo();$('azSnd').hidden=false}},2000)},
+        onStateChange:e=>{if(e.data===0)tutup()},onError:()=>tutup()}});
+    setTimeout(tutup,10*60000)}; // pengaman: tutup paling lama 10 menit
+  $('azSnd').onclick=()=>{if(player){player.unMute();player.setVolume(100);player.playVideo()}$('azSnd').hidden=true};
+  $('azX').onclick=tutup;$('azUji').onclick=()=>putar('(uji)');
+  const cek=()=>{if(!on||!jadwal)return;const t=wib(),m=t.getHours()*60+t.getMinutes(),hari=t.toDateString();
+    for(const k of Object.keys(NAMA)){const [h,mm]=(jadwal[k]||'').split(':').map(Number);const target=h*60+mm,id=hari+k;
+      if(m>=target&&m<target+3&&!sudah.includes(id)){sudah+=id+';';putar(NAMA[k]);break}}};
+  muat();setInterval(muat,3*3600000);setInterval(cek,15000);
 }
 </script>
 </body>
