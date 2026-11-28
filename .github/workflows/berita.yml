@@ -28,11 +28,15 @@ jobs:
       - name: Titik api NASA FIRMS (Sumsel)
         run: python3 scripts/titik_api.py hotspot.json
         continue-on-error: true
+      - name: Curah hujan SITAJIR Palembang
+        run: python3 scripts/curah_hujan.py hujan.json
+        continue-on-error: true
       - name: Commit jika berubah
         run: |
           git add news.json
           [ -f ruas.json ] && git add ruas.json
           [ -f hotspot.json ] && git add hotspot.json
+          [ -f hujan.json ] && git add hujan.json
           if git diff --cached --quiet; then echo "tidak ada perubahan"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
